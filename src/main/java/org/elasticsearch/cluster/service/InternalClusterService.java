@@ -113,7 +113,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     public void addInitialStateBlock(ClusterBlock block) throws ElasticsearchIllegalStateException {
-        if (lifecycle.started()) {
+        if (lifecycle.started() || lifecycle.disabled()) {
             throw new ElasticsearchIllegalStateException("can't set initial block when started");
         }
         initialBlocks.addGlobalBlock(block);
@@ -121,7 +121,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     @Override
     public void removeInitialStateBlock(ClusterBlock block) throws ElasticsearchIllegalStateException {
-        if (lifecycle.started()) {
+        if (lifecycle.started() || lifecycle.disabled()) {
             throw new ElasticsearchIllegalStateException("can't set initial block when started");
         }
         initialBlocks.removeGlobalBlock(block);
@@ -155,16 +155,20 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     @Override
     protected void doStop() throws ElasticsearchException {
-        this.reconnectToNodes.cancel(true);
+        if (this.reconnectToNodes != null) {
+            this.reconnectToNodes.cancel(true);
+        }
         for (NotifyTimeout onGoingTimeout : onGoingTimeouts) {
             onGoingTimeout.cancel();
             onGoingTimeout.listener.onClose();
         }
-        updateTasksExecutor.shutdown();
-        try {
-            updateTasksExecutor.awaitTermination(10, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            // ignore
+        if (updateTasksExecutor != null) {
+            updateTasksExecutor.shutdown();
+            try {
+                updateTasksExecutor.awaitTermination(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                // ignore
+            }
         }
         remove(localNodeMasterListeners);
     }
@@ -253,7 +257,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     public void submitStateUpdateTask(final String source, Priority priority, final ClusterStateUpdateTask updateTask) {
-        if (!lifecycle.started()) {
+        if (!(lifecycle.started() || lifecycle.disabled())) {
             return;
         }
         try {
@@ -319,7 +323,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
         @Override
         public void run() {
-            if (!lifecycle.started()) {
+            if (!(lifecycle.started() || lifecycle.disabled())) {
                 logger.debug("processing [{}]: ignoring, cluster_service not started", source);
                 return;
             }
@@ -556,7 +560,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
                     failedNodesIt.remove();
                 }
             }
-            if (lifecycle.started()) {
+            if (lifecycle.started() || lifecycle.disabled()) {
                 reconnectToNodes = threadPool.schedule(reconnectInterval, ThreadPool.Names.GENERIC, this);
             }
         }

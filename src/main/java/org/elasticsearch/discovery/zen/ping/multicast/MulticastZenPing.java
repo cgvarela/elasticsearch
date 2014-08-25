@@ -111,7 +111,7 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
 
     @Override
     public void setPingContextProvider(PingContextProvider nodesProvider) {
-        if (lifecycle.started()) {
+        if (lifecycle.started() || lifecycle.disabled()) {
             throw new ElasticsearchIllegalStateException("Can't set nodes provider when started");
         }
         this.contextProvider = nodesProvider;
@@ -333,7 +333,7 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
                     handleNodePingRequest(id, requestingNodeX, clusterName);
                 }
             } catch (Exception e) {
-                if (!lifecycle.started() || (e instanceof EsRejectedExecutionException)) {
+                if (!(lifecycle.started() || lifecycle.disabled()) || (e instanceof EsRejectedExecutionException)) {
                     logger.debug("failed to read requesting data from {}", e, address);
                 } else {
                     logger.warn("failed to read requesting data from {}", e, address);
@@ -453,7 +453,7 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
                                 }
                             });
                         } catch (Exception e) {
-                            if (lifecycle.started()) {
+                            if (lifecycle.started() || lifecycle.disabled()) {
                                 logger.warn("failed to connect to requesting node {}", e, requestingNode);
                             }
                         }
@@ -463,7 +463,7 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
                 transportService.sendRequest(requestingNode, ACTION_NAME, multicastPingResponse, new EmptyTransportResponseHandler(ThreadPool.Names.SAME) {
                     @Override
                     public void handleException(TransportException exp) {
-                        if (lifecycle.started()) {
+                        if (lifecycle.started() || lifecycle.disabled()) {
                             logger.warn("failed to receive confirmation on sent ping response to [{}]", exp, requestingNode);
                         }
                     }
